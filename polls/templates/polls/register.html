@@ -1,0 +1,19 @@
+<form action="" method="post">
+    {% csrf_token %}
+        <legend><h1>Register</h1></legend>
+        {% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+            <input type="text" name="firstname" id="firstname" value="">
+            <br>
+            <input type="text" name="lastname" id="lastname" value="">
+            <br>
+            <input type="text" name="email" id="email" value="">
+            <br>
+            <input type="text" name="country" id="country" value="">
+
+            <label for="password">Password</label><br>
+            <input type="password" name="password" id="password" value="">
+
+
+
+    <input type="submit" value="Vote">
+</form>
