@@ -4,9 +4,8 @@ from django.db.models import F
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
-from django.template import loader
 from django.contrib.auth.models import User
-
+from django.contrib.auth import login as _login, authenticate
 from .models import Choice, Question, PollUser
 
 
@@ -28,6 +27,7 @@ def results(request, question_id):
 
 
 def vote(request, question_id):
+    print("POST DATA", request.POST)
     question = get_object_or_404(Question, pk=question_id)
     try:
         selected_choice = question.choice_set.get(pk=request.POST["choice"])
@@ -54,10 +54,15 @@ def register(request):
         try:
             first_name = request.POST["firstname"]
             last_name = request.POST["lastname"]
+            email = request.POST["email"]
             country = request.POST["country"]
             password = request.POST["password"]
+            repeat_password = request.POST["repeat_password"]
         except:
-            return render(request, "polls/register.html", {"error_message": "M"})
+            return render(request, "polls/register.html", {"error_message": "Missed Field"})
+
+        if password != repeat_password:
+            return render(request, "polls/register.html", {"error_message": "Password not match"})
 
     user = User.objects.create_user(username=email, email = email, password=password)
     user.first_name=first_name
@@ -67,8 +72,23 @@ def register(request):
     poll_user = PollUser(user=user, country=country)
     poll_user.save()
 
-    return HttpResponseRedirect('/login/')
+    return HttpResponseRedirect('/polls/login/')
 
 def login(request):
     if request.method == "GET":
-        return HttpResponseRedirect("Welcome to login page")
+        return render(request, 'polls/login.html', {})
+    else:
+        try:
+            email = request.POST["email"]
+            password = request.POST["password"]
+        except:
+            return render(request, "polls/login.html", {"error_message": "Missed Field"})
+
+    user = authenticate(username=email, password=password)
+    print("USER", email, password)
+    if user:
+        _login(request, user)
+        return HttpResponseRedirect('/polls/')
+
+    else:
+        return render(request, "polls/login.html", {"error_message": "Email or password is incorrect"})
