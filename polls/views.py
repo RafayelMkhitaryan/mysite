@@ -5,17 +5,25 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.contrib.auth.models import User
-from django.contrib.auth import login as _login, authenticate
+from django.contrib.auth import login as _login, authenticate, logout as _logout
 from .models import Choice, Question, PollUser
+from datetime import  datetime
 
 
 def index(request):
-    latest_question_list = Question.objects.order_by("-pub_date")[:5]
-    template = loader.get_template("polls/index.html")
-    context = {
-        "latest_question_list": latest_question_list,
-    }
-    return render(request, "polls/index.html", context)
+    print("USER", request.user)
+    if request.user.is_authenticated:
+        latest_question_list = Question.objects.order_by("-pub_date")[:5]
+        context = {
+            "latest_question_list": latest_question_list,
+            "user": request.user
+        }
+        usr = PollUser.objects.get(user=request.user)
+        log = UserLog(user=usr, action_time=datetime.now(), action="question")
+        log.save()
+        return render(request, "polls/index.html", context)
+    else:
+        return HttpResponseRedirect('/polls/login')
 
 def detail(request, question_id):
     question = get_object_or_404(Question, pk=question_id)
@@ -88,7 +96,13 @@ def login(request):
     print("USER", email, password)
     if user:
         _login(request, user)
+        usr = PollUser.objects.get(user=user)
+        UserLog(user=usr,action_time=datetime.now())
         return HttpResponseRedirect('/polls/')
 
     else:
         return render(request, "polls/login.html", {"error_message": "Email or password is incorrect"})
+
+def logout(request):
+    _logout(request)
+    return HttpResponseRedirect("/polls/login")
