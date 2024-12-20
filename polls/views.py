@@ -1,33 +1,49 @@
+#
 import json
 
+#
 from django.db.models import F
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.contrib.auth.models import User
-from django.contrib.auth import login as _login, authenticate, logout as _logout
-from .models import Choice, Question, PollUser
-from datetime import  datetime
+from django.contrib.auth import authenticate, login as _login, logout as _logout
+from datetime import datetime
+
+# for adding choice
+from .forms import ChoiceForm
+from django.shortcuts import redirect
+#
+from .models import Choice, Question, PollUser, UserLog
 
 
 def index(request):
-    print("USER", request.user)
     if request.user.is_authenticated:
-        latest_question_list = Question.objects.order_by("-pub_date")[:5]
+        my_questions = Question.objects.filter(author__user=request.user).order_by("-pub_date")
+        other_questions = Question.objects.exclude(author__user=request.user).order_by("-pub_date")
         context = {
-            "latest_question_list": latest_question_list,
-            "user": request.user
+            "my_questions": my_questions,
+            "other_questions": other_questions,
+            "user": request.user,
         }
         usr = PollUser.objects.get(user=request.user)
-        log = UserLog(user=usr, action_time=datetime.now(), action="question")
+        log = UserLog(user=usr, action_time=datetime.now(), action='question')
         log.save()
         return render(request, "polls/index.html", context)
     else:
         return HttpResponseRedirect('/polls/login')
 
+
 def detail(request, question_id):
-    question = get_object_or_404(Question, pk=question_id)
-    return render(request, "polls/detail.html", {"question": question})
+    if request.user.is_authenticated:
+        question = get_object_or_404(Question, pk=question_id)
+        if question.author is not None and question.author.user == request.user:
+            return render(request, "polls/results.html", {"question": question})
+        else:
+            return render(request, "polls/detail.html", {"question": question})
+    else:
+        return HttpResponseRedirect('/polls/login')
+
 
 def results(request, question_id):
     question = get_object_or_404(Question, pk=question_id)
@@ -52,8 +68,11 @@ def vote(request, question_id):
     else:
         selected_choice.votes = F("votes") + 1
         selected_choice.save()
-
+        # Always return an HttpResponseRedirect after successfully dealing
+        # with POST data. This prevents data from being posted twice if a
+        # user hits the Back button.
         return HttpResponseRedirect(reverse("polls:results", args=(question.id,)))
+
 
 def register(request):
     if request.method == "GET":
@@ -70,17 +89,18 @@ def register(request):
             return render(request, "polls/register.html", {"error_message": "Missed Field"})
 
         if password != repeat_password:
-            return render(request, "polls/register.html", {"error_message": "Password not match"})
+            return render(request, "polls/register.html", {"error_message": "Password not match."})
 
-    user = User.objects.create_user(username=email, email = email, password=password)
-    user.first_name=first_name
-    user.last_name=last_name
+    user = User.objects.create_user(username=email, email=email, password=password)
+    user.first_name = first_name
+    user.last_name = last_name
     user.save()
 
     poll_user = PollUser(user=user, country=country)
     poll_user.save()
 
     return HttpResponseRedirect('/polls/login/')
+
 
 def login(request):
     if request.method == "GET":
@@ -97,12 +117,48 @@ def login(request):
     if user:
         _login(request, user)
         usr = PollUser.objects.get(user=user)
-        UserLog(user=usr,action_time=datetime.now())
+        log = UserLog(user=usr, action_time=datetime.now(), action='login')
+        log.save()
         return HttpResponseRedirect('/polls/')
-
     else:
-        return render(request, "polls/login.html", {"error_message": "Email or password is incorrect"})
+        return render(request, "polls/login.html", {"error_message": "Email or password is incorrect."})
+
 
 def logout(request):
     _logout(request)
     return HttpResponseRedirect("/polls/login")
+
+
+def add_question(request):
+    if request.user.is_authenticated:
+        if request.method == 'GET':
+            return render(request, "polls/add_question.html", {})
+
+        else:
+            user = request.user
+            puser = PollUser.objects.get(user=user)
+            question_text = request.POST["question"]
+
+            q = Question(author=puser,
+                         question_text=question_text,
+                         pub_date=datetime.now()
+                         )
+            q.save()
+            return HttpResponseRedirect("/polls/" + str(q.id))
+
+
+    else:
+        return HttpResponseRedirect("/polls/login")
+
+def add_choice(request, question_id):
+    question = get_object_or_404(Question, pk=question_id)
+    if request.method == 'POST':
+        form = ChoiceForm(request.POST)
+        if form.is_valid():
+            choice = form.save(commit=False)
+            choice.question = question
+            choice.save()
+            return redirect('polls:detail', question_id)
+    else:
+        form = ChoiceForm()
+    return render(request, 'polls/add_choice.html', {'form': form, 'question': question})
